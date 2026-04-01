@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { fetchPokemon, type PokemonData } from "@/lib/pokeapi";
 
 interface ShopItem {
   id: string;
@@ -14,11 +15,14 @@ interface ShopItem {
   action: (supabase: any, userId: string, player: any) => Promise<void>;
 }
 
+const LEGENDARY_IDS = [144, 145, 146, 150, 151]; // Articuno, Zapdos, Moltres, Mewtwo, Mew
+
 const SHOP_ITEMS: Omit<ShopItem, "action">[] = [
   { id: "pokeball-5", name: "5 Pokéballs", description: "Stock up on Pokéballs to catch wild Pokémon", price: 100, emoji: "🔴" },
   { id: "pokeball-20", name: "20 Pokéballs", description: "Bulk deal on Pokéballs!", price: 350, emoji: "🔴" },
   { id: "heal-team", name: "Full Heal", description: "Restore all your Pokémon to full HP", price: 150, emoji: "💊" },
   { id: "rare-candy", name: "Rare Candy", description: "Level up your first Pokémon by 1", price: 300, emoji: "🍬" },
+  { id: "legendary", name: "Legendary Pokémon", description: "Buy a random Legendary Pokémon for your collection!", price: 1000, emoji: "🌟" },
 ];
 
 export default function ShopPage() {
@@ -106,6 +110,38 @@ export default function ShopPage() {
       }
       setPokedollars(newDollars);
       setMessage("Your lead Pokémon leveled up!");
+    } else if (item.id === "legendary") {
+      const randomId = LEGENDARY_IDS[Math.floor(Math.random() * LEGENDARY_IDS.length)];
+      const pokemon: PokemonData = await fetchPokemon(randomId);
+      const isShiny = Math.random() < 0.05;
+
+      await supabase.from("players").update({ pokedollars: newDollars }).eq("id", user.id);
+
+      await Promise.all([
+        supabase.from("player_pokemon").insert({
+          player_id: user.id,
+          pokeapi_id: pokemon.id,
+          name: pokemon.name,
+          type: pokemon.types[0],
+          hp: pokemon.hp,
+          max_hp: pokemon.hp,
+          atk: pokemon.atk,
+          level: 50,
+          is_shiny: isShiny,
+          moves: pokemon.moves,
+        }),
+        supabase.from("pokedex_entries").upsert({
+          player_id: user.id,
+          pokeapi_id: pokemon.id,
+          name: pokemon.name,
+          type: pokemon.types[0],
+          caught: true,
+          is_shiny: isShiny,
+        }, { onConflict: "player_id,pokeapi_id" }),
+      ]);
+
+      setPokedollars(newDollars);
+      setMessage(`You got ${pokemon.name}${isShiny ? " ✨" : ""}! A Legendary Pokémon joins your team!`);
     }
 
     setBuying(null);
