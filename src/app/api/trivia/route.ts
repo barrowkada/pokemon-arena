@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const BASE = "https://pokeapi.co/api/v2";
-const MAX_ID = 898;
+const MAX_ID = 1025;
 
 const ALL_TYPES = [
   "normal", "fire", "water", "grass", "electric", "ice", "fighting",
@@ -149,7 +149,7 @@ async function questionGeneration(excludeId: number) {
   const species = await cachedFetch(`${BASE}/pokemon-species/${id}`);
   const genUrl = species.generation.url as string;
   const genNum = parseInt(genUrl.split("/").filter(Boolean).pop()!);
-  const wrongs = pickRandom([1, 2, 3, 4, 5, 6, 7, 8], 3, [genNum]);
+  const wrongs = pickRandom([1, 2, 3, 4, 5, 6, 7, 8, 9], 3, [genNum]);
   return buildQuestion(
     `What generation is ${capitalize(species.name)} from?`,
     `Generation ${genNum}`,

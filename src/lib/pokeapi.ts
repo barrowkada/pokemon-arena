@@ -46,7 +46,7 @@ export async function fetchPokemon(idOrName: number | string): Promise<PokemonDa
 export async function fetchRandomPokemon(count: number = 1): Promise<PokemonData[]> {
   const ids = new Set<number>();
   while (ids.size < count) {
-    ids.add(Math.floor(Math.random() * 151) + 1); // Gen 1
+    ids.add(Math.floor(Math.random() * 1025) + 1); // All generations
   }
   return Promise.all([...ids].map(fetchPokemon));
 }
