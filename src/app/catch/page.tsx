@@ -67,8 +67,8 @@ export default function CatchPage() {
     }
     // If at 10 or below, the throw is free
 
-    // Fetch trivia question
-    const res = await fetch("/api/trivia");
+    // Fetch trivia question (exclude the caught pokemon's ID)
+    const res = await fetch(`/api/trivia?exclude=${wild?.id ?? 0}`);
     const q: TriviaQuestion = await res.json();
     setTrivia(q);
     setSelectedAnswer(null);
