@@ -7,7 +7,7 @@ const MAX_ID = 898;
 const ALL_TYPES = [
   "normal", "fire", "water", "grass", "electric", "ice", "fighting",
   "poison", "ground", "flying", "psychic", "bug", "rock", "ghost",
-  "dragon", "dark", "steel", "fairy",
+  "dragon", "dark", "steel", "fairy", "cosmic",
 ];
 
 const ALL_COLORS = [
@@ -206,24 +206,6 @@ async function questionAbility(excludeId: number) {
   );
 }
 
-async function questionHeight(excludeId: number) {
-  const id = randId(excludeId);
-  const pokemon = await cachedFetch(`${BASE}/pokemon/${id}`);
-  const name = capitalize(pokemon.name);
-  const heightM = (pokemon.height / 10).toFixed(1);
-  const base = pokemon.height / 10;
-  const wrongs = [
-    Math.max(0.1, base * (0.4 + Math.random() * 0.3)).toFixed(1),
-    (base * (1.4 + Math.random() * 0.5)).toFixed(1),
-    (base * (2.0 + Math.random() * 1.0)).toFixed(1),
-  ];
-  return buildQuestion(
-    `How tall is ${name}?`,
-    `${heightM} m`,
-    wrongs.map((h) => `${h} m`),
-  );
-}
-
 async function questionColor(excludeId: number) {
   const id = randId(excludeId);
   const species = await cachedFetch(`${BASE}/pokemon-species/${id}`);
@@ -291,7 +273,6 @@ const generators = [
   questionGeneration,
   questionWeight,
   questionAbility,
-  questionHeight,
   questionColor,
   questionShape,
 ];
