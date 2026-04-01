@@ -7,7 +7,7 @@ const MAX_ID = 898;
 const ALL_TYPES = [
   "normal", "fire", "water", "grass", "electric", "ice", "fighting",
   "poison", "ground", "flying", "psychic", "bug", "rock", "ghost",
-  "dragon", "dark", "steel", "fairy",
+  "dragon", "dark", "steel", "fairy", "cosmic",
 ];
 
 const ALL_COLORS = [
