@@ -5,10 +5,18 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchRandomPokemon, spriteUrl, type PokemonData } from "@/lib/pokeapi";
 import type { PlayerPokemon } from "@/lib/types";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Gift } from "lucide-react";
 
-type BattlePhase = "loading" | "pick" | "ready" | "fighting" | "result";
+type BattlePhase = "loading" | "pick" | "ready" | "fighting" | "mystery" | "reward" | "result";
 type LogEntry = { text: string; type: "player" | "opponent" | "system" };
+
+type RewardType = "xp" | "pokeball" | "pokemon" | "pokedollars";
+interface Reward {
+  type: RewardType;
+  label: string;
+  emoji: string;
+  detail: string;
+}
 
 export default function BattlePage() {
   const [phase, setPhase] = useState<BattlePhase>("loading");
@@ -21,6 +29,8 @@ export default function BattlePage() {
   const [log, setLog] = useState<LogEntry[]>([]);
   const [result, setResult] = useState<"win" | "loss" | null>(null);
   const [isShiny, setIsShiny] = useState(false);
+  const [reward, setReward] = useState<Reward | null>(null);
+  const [boxOpened, setBoxOpened] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
@@ -47,7 +57,6 @@ export default function BattlePage() {
       setOpponent(opp);
       setIsShiny(shiny);
 
-      // If only 1 Pokémon, skip pick phase
       if (pokemon.length === 1) {
         selectPokemon(pokemon[0], opp, shiny);
       } else {
@@ -64,7 +73,6 @@ export default function BattlePage() {
     setActivePokemon(pokemon);
     setPlayerHp(pokemon.hp);
 
-    // Scale opponent to player level ± 2
     const levelMod = (pokemon.level + Math.floor(Math.random() * 5) - 2) / 5;
     const scaledHp = Math.max(10, Math.floor(o.hp * levelMod));
 
@@ -91,7 +99,6 @@ export default function BattlePage() {
     const moves = Array.isArray(activePokemon.moves) ? activePokemon.moves : [];
     const moveName = moves[moveIndex] ?? "tackle";
 
-    // Player attacks
     const playerDmg = Math.floor(
       (activePokemon.atk * (0.8 + Math.random() * 0.4) * activePokemon.level) / 10
     );
@@ -106,7 +113,6 @@ export default function BattlePage() {
       return;
     }
 
-    // Opponent attacks
     const oppAtk = opponent.atk;
     const oppDmg = Math.floor(
       (oppAtk * (0.7 + Math.random() * 0.4) * (activePokemon.level)) / 12
@@ -124,19 +130,38 @@ export default function BattlePage() {
     setPhase("ready");
   }
 
+  function rollReward(): Reward {
+    const roll = Math.random();
+    if (roll < 0.10) {
+      // 10% chance: random Pokémon
+      return { type: "pokemon", label: "Mystery Pokémon", emoji: "🎊", detail: "" };
+    } else if (roll < 0.40) {
+      // 30% chance: extra XP
+      const xp = 25 + Math.floor(Math.random() * 25);
+      return { type: "xp", label: "Bonus EXP", emoji: "⭐", detail: `+${xp} EXP` };
+    } else if (roll < 0.70) {
+      // 30% chance: pokéball
+      const balls = 1 + Math.floor(Math.random() * 3);
+      return { type: "pokeball", label: "Pokéballs", emoji: "🔴", detail: `+${balls} Pokéball${balls > 1 ? "s" : ""}` };
+    } else {
+      // 30% chance: pokédollars
+      const dollars = 75 + Math.floor(Math.random() * 75);
+      return { type: "pokedollars", label: "PokéDollars", emoji: "💰", detail: `+₽${dollars}` };
+    }
+  }
+
   async function handleWin() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !opponent || !activePokemon) return;
 
-    const expGain = 15 + Math.floor(Math.random() * 10);
-    const dollarReward = 50 + Math.floor(Math.random() * 50);
-
     addLog(`${opponent.name} fainted! You win!`, "system");
-    addLog(`+${expGain} EXP, +${dollarReward} PokéDollars`, "system");
+    addLog(`You received a Mystery Gift!`, "system");
 
+    // Base win updates: +1 win, +1 battle_strength, base EXP
+    const baseExp = 15 + Math.floor(Math.random() * 10);
     const { data: currentPlayer } = await supabase
       .from("players")
-      .select("wins, pokedollars, battle_strength")
+      .select("wins, pokedollars, pokeballs, battle_strength")
       .eq("id", user.id)
       .single();
 
@@ -145,13 +170,12 @@ export default function BattlePage() {
         .from("players")
         .update({
           wins: (currentPlayer?.wins ?? 0) + 1,
-          pokedollars: (currentPlayer?.pokedollars ?? 0) + dollarReward,
           battle_strength: (currentPlayer?.battle_strength ?? 0) + 1,
         })
         .eq("id", user.id),
       supabase.from("player_pokemon").update({
-        exp: activePokemon.exp + expGain,
-        level: activePokemon.exp + expGain >= activePokemon.level * 20
+        exp: activePokemon.exp + baseExp,
+        level: activePokemon.exp + baseExp >= activePokemon.level * 20
           ? activePokemon.level + 1
           : activePokemon.level,
       }).eq("id", activePokemon.id),
@@ -160,14 +184,92 @@ export default function BattlePage() {
         opponent_pokemon_id: opponent.id,
         opponent_name: opponent.name,
         result: "win",
-        reward_type: "pokedollars",
+        reward_type: "mystery_gift",
         player_pokemon_id: activePokemon.pokeapi_id,
         opponent_was_shiny: isShiny,
       }),
     ]);
 
+    // Roll the mystery gift reward (but don't reveal yet)
+    const r = rollReward();
+    setReward(r);
     setResult("win");
-    setPhase("result");
+    setBoxOpened(false);
+    setPhase("mystery");
+  }
+
+  async function openMysteryBox() {
+    if (!reward || boxOpened) return;
+    setBoxOpened(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !activePokemon) return;
+
+    const { data: currentPlayer } = await supabase
+      .from("players")
+      .select("pokedollars, pokeballs")
+      .eq("id", user.id)
+      .single();
+
+    if (reward.type === "xp") {
+      const bonusXp = parseInt(reward.detail.replace("+", "").replace(" EXP", ""));
+      const { data: freshPokemon } = await supabase
+        .from("player_pokemon")
+        .select("exp, level")
+        .eq("id", activePokemon.id)
+        .single();
+      if (freshPokemon) {
+        const newExp = freshPokemon.exp + bonusXp;
+        await supabase.from("player_pokemon").update({
+          exp: newExp,
+          level: newExp >= freshPokemon.level * 20 ? freshPokemon.level + 1 : freshPokemon.level,
+        }).eq("id", activePokemon.id);
+      }
+    } else if (reward.type === "pokeball") {
+      const balls = parseInt(reward.detail.match(/\d+/)?.[0] ?? "1");
+      await supabase.from("players").update({
+        pokeballs: (currentPlayer?.pokeballs ?? 0) + balls,
+      }).eq("id", user.id);
+    } else if (reward.type === "pokedollars") {
+      const dollars = parseInt(reward.detail.match(/\d+/)?.[0] ?? "75");
+      await supabase.from("players").update({
+        pokedollars: (currentPlayer?.pokedollars ?? 0) + dollars,
+      }).eq("id", user.id);
+    } else if (reward.type === "pokemon") {
+      // Award a random Gen 1 Pokémon
+      const [wildPrize] = await fetchRandomPokemon(1);
+      const prizeShiny = Math.random() < 0.05;
+      reward.detail = `${wildPrize.name}${prizeShiny ? " ✨" : ""}`;
+
+      await Promise.all([
+        supabase.from("player_pokemon").insert({
+          player_id: user.id,
+          pokeapi_id: wildPrize.id,
+          name: wildPrize.name,
+          type: wildPrize.types[0],
+          hp: wildPrize.hp,
+          max_hp: wildPrize.hp,
+          atk: wildPrize.atk,
+          level: 3 + Math.floor(Math.random() * 5),
+          is_shiny: prizeShiny,
+          moves: wildPrize.moves,
+        }),
+        supabase.from("pokedex_entries").upsert({
+          player_id: user.id,
+          pokeapi_id: wildPrize.id,
+          name: wildPrize.name,
+          type: wildPrize.types[0],
+          caught: true,
+          is_shiny: prizeShiny,
+        }, { onConflict: "player_id,pokeapi_id" }),
+      ]);
+
+      setReward({ ...reward, detail: `You got ${wildPrize.name}${prizeShiny ? " ✨" : ""}!` });
+    }
+
+    // Short delay then show full reward
+    await delay(400);
+    setPhase("reward");
   }
 
   async function handleLoss() {
@@ -276,14 +378,62 @@ export default function BattlePage() {
     );
   }
 
+  // Mystery gift box (unopened)
+  if (phase === "mystery") {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4">
+        <h2 className="text-2xl font-bold text-success mb-2">Victory!</h2>
+        <p className="text-zinc-400 mb-8">You received a Mystery Gift!</p>
+
+        <button
+          onClick={openMysteryBox}
+          disabled={boxOpened}
+          className="group relative cursor-pointer"
+        >
+          <div className={`w-36 h-36 rounded-2xl bg-gradient-to-br from-accent/80 to-pokemon-yellow/60 flex items-center justify-center transition-all ${
+            boxOpened ? "scale-90 opacity-50" : "animate-pulse-glow hover:scale-110"
+          }`}>
+            <Gift size={64} className="text-background group-hover:animate-shake" />
+          </div>
+          {!boxOpened && (
+            <p className="text-center text-sm text-zinc-400 mt-4">Tap to open!</p>
+          )}
+          {boxOpened && (
+            <p className="text-center text-sm text-zinc-400 mt-4">Opening...</p>
+          )}
+        </button>
+      </div>
+    );
+  }
+
+  // Reward revealed
+  if (phase === "reward" && reward) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4">
+        <div className="animate-slide-up flex flex-col items-center">
+          <span className="text-6xl mb-4">{reward.emoji}</span>
+          <h2 className="text-2xl font-bold text-accent mb-1">{reward.label}</h2>
+          <p className="text-lg text-zinc-300 capitalize">{reward.detail}</p>
+        </div>
+
+        <div className="flex gap-3 mt-10">
+          <button onClick={() => window.location.reload()} className="btn-primary">
+            Battle Again
+          </button>
+          <button onClick={() => router.push("/hub")} className="btn-secondary">
+            Back to Hub
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col max-w-2xl mx-auto w-full px-4 py-6">
-      {/* Back button */}
       <button onClick={() => router.push("/hub")} className="flex items-center gap-2 text-zinc-400 hover:text-white mb-6 self-start transition">
         <ArrowLeft size={18} /> Back to Hub
       </button>
 
-      {/* Battle field */}
       <div className="flex-1 flex flex-col">
         {/* Opponent */}
         {opponent && (
@@ -386,11 +536,10 @@ export default function BattlePage() {
           </div>
         )}
 
-        {phase === "result" && (
+        {/* Loss result */}
+        {phase === "result" && result === "loss" && (
           <div className="mt-6 text-center">
-            <h2 className={`text-2xl font-bold ${result === "win" ? "text-success" : "text-danger"}`}>
-              {result === "win" ? "Victory!" : "Defeat..."}
-            </h2>
+            <h2 className="text-2xl font-bold text-danger">Defeat...</h2>
             <div className="flex gap-3 justify-center mt-4">
               <button onClick={() => window.location.reload()} className="btn-primary">
                 Battle Again
