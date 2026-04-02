@@ -54,18 +54,15 @@ export default function CatchPage() {
       return;
     }
 
-    // Decrement pokéballs (floor at 10 — won't go below 10)
+    // Decrement pokéballs
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    if (pokeballs > 10) {
-      await supabase
-        .from("players")
-        .update({ pokeballs: pokeballs - 1 })
-        .eq("id", user.id);
-      setPokeballs((p) => p - 1);
-    }
-    // If at 10 or below, the throw is free
+    await supabase
+      .from("players")
+      .update({ pokeballs: pokeballs - 1 })
+      .eq("id", user.id);
+    setPokeballs((p) => p - 1);
 
     // Fetch trivia question (exclude the caught pokemon's ID)
     const res = await fetch(`/api/trivia?exclude=${wild?.id ?? 0}`);
