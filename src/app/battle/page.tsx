@@ -144,9 +144,9 @@ export default function BattlePage() {
       const balls = 1 + Math.floor(Math.random() * 3);
       return { type: "pokeball", label: "Pokéballs", emoji: "🔴", detail: `+${balls} Pokéball${balls > 1 ? "s" : ""}` };
     } else {
-      // 30% chance: pokédollars
-      const dollars = 75 + Math.floor(Math.random() * 75);
-      return { type: "pokedollars", label: "PokéDollars", emoji: "💰", detail: `+₽${dollars}` };
+      // 30% chance: pokédollars (100 to 10,000 in increments of 100)
+      const dollars = (1 + Math.floor(Math.random() * 100)) * 100;
+      return { type: "pokedollars", label: "PokéDollars", emoji: "💰", detail: `+₽${dollars.toLocaleString()}` };
     }
   }
 
